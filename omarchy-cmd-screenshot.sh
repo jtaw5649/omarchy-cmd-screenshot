@@ -18,6 +18,34 @@ TMPFILE=""
 FREEZE_MONITOR_NAMES=()
 FREEZE_MONITOR_SPECS=()
 FREEZE_MONITOR_BITDEPTHS=()
+FREEZE_MONITOR_COLORS=()
+FREEZE_MONITOR_COLOR_APPLIED=()
+FREEZE_ENFORCER_PID=""
+
+wait_for_monitor_bitdepth() {
+  local attempts=0
+  local max_attempts=40
+  local monitors_state current ready name
+
+  (( ${#FREEZE_MONITOR_NAMES[@]} == 0 )) && return 0
+
+  while (( attempts < max_attempts )); do
+    ready=1
+    monitors_state=$(hyprctl monitors -j)
+    for name in "${FREEZE_MONITOR_NAMES[@]}"; do
+      current=$(jq -r --arg name "$name" '.[] | select(.name == $name) | .currentFormat // ""' <<<"$monitors_state")
+      if [[ "$current" =~ 2101010|16161616|FP16 ]]; then
+        ready=0
+        break
+      fi
+    done
+    (( ready )) && return 0
+    sleep 0.02
+    ((attempts++))
+  done
+
+  return 1
+}
 
 start_freeze() {
   command -v wayfreeze >/dev/null 2>&1 || return 1
@@ -44,13 +72,49 @@ start_freeze() {
       refresh_fmt="$refresh"
       scale_fmt="$scale"
       spec="${width}x${height}@${refresh_fmt},${x}x${y},${scale_fmt}"
-      if hyprctl keyword monitor "$name,$spec,bitdepth,8" >/dev/null 2>&1; then
-        FREEZE_MONITOR_NAMES+=("$name")
-        FREEZE_MONITOR_SPECS+=("$spec")
-        FREEZE_MONITOR_BITDEPTHS+=("$bitdepth")
+      local color_mode color_applied
+      color_mode=$(jq -r '.colorimetry // .colorimetryState // .colorimetryPreset // empty' <<<"$monitor_json")
+      if [[ -z "$color_mode" || "$color_mode" == "null" ]]; then
+        if (( bitdepth > 8 )); then
+          color_mode="hdr"
+        else
+          color_mode="srgb"
+        fi
       fi
+
+      color_applied=0
+      if hyprctl keyword monitor "$name,$spec,bitdepth,8,cm,srgb" >/dev/null 2>&1; then
+        color_applied=1
+      elif ! hyprctl keyword monitor "$name,$spec,bitdepth,8" >/dev/null 2>&1; then
+        continue
+      fi
+
+      FREEZE_MONITOR_NAMES+=("$name")
+      FREEZE_MONITOR_SPECS+=("$spec")
+      FREEZE_MONITOR_BITDEPTHS+=("$bitdepth")
+      FREEZE_MONITOR_COLORS+=("$color_mode")
+      FREEZE_MONITOR_COLOR_APPLIED+=("$color_applied")
     fi
   done < <(jq -c '.[]' <<<"$monitors_json")
+
+  wait_for_monitor_bitdepth || sleep 0.1
+
+  if ((${#FREEZE_MONITOR_NAMES[@]})); then
+    (
+      while true; do
+        for i in "${!FREEZE_MONITOR_NAMES[@]}"; do
+          if [[ "${FREEZE_MONITOR_COLOR_APPLIED[$i]}" == "1" ]]; then
+            hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,8,cm,srgb" >/dev/null 2>&1 || \
+              hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,8" >/dev/null 2>&1
+          else
+            hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,8" >/dev/null 2>&1
+          fi
+        done
+        sleep 0.1
+      done
+    ) &
+    FREEZE_ENFORCER_PID=$!
+  fi
 
   wayfreeze --hide-cursor >/dev/null 2>&1 &
   FREEZE_PID=$!
@@ -58,6 +122,11 @@ start_freeze() {
 }
 
 stop_freeze() {
+  if [[ -n "$FREEZE_ENFORCER_PID" ]]; then
+    kill "$FREEZE_ENFORCER_PID" 2>/dev/null
+    wait "$FREEZE_ENFORCER_PID" 2>/dev/null
+    FREEZE_ENFORCER_PID=""
+  fi
   if [[ -n "$FREEZE_PID" ]]; then
     kill "$FREEZE_PID" 2>/dev/null
     wait "$FREEZE_PID" 2>/dev/null
@@ -65,12 +134,19 @@ stop_freeze() {
   fi
   if ((${#FREEZE_MONITOR_NAMES[@]})); then
     for i in "${!FREEZE_MONITOR_NAMES[@]}"; do
-      hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,${FREEZE_MONITOR_BITDEPTHS[$i]}" >/dev/null 2>&1
+      if [[ "${FREEZE_MONITOR_COLOR_APPLIED[$i]}" == "1" ]]; then
+        hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,${FREEZE_MONITOR_BITDEPTHS[$i]},cm,${FREEZE_MONITOR_COLORS[$i]}" >/dev/null 2>&1 || \
+          hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,${FREEZE_MONITOR_BITDEPTHS[$i]}" >/dev/null 2>&1
+      else
+        hyprctl keyword monitor "${FREEZE_MONITOR_NAMES[$i]},${FREEZE_MONITOR_SPECS[$i]},bitdepth,${FREEZE_MONITOR_BITDEPTHS[$i]}" >/dev/null 2>&1
+      fi
     done
   fi
   FREEZE_MONITOR_NAMES=()
   FREEZE_MONITOR_SPECS=()
   FREEZE_MONITOR_BITDEPTHS=()
+  FREEZE_MONITOR_COLORS=()
+  FREEZE_MONITOR_COLOR_APPLIED=()
 }
 
 get_rectangles() {
