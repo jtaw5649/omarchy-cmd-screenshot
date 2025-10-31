@@ -4,28 +4,24 @@ This repository captures the changes made to `omarchy-cmd-screenshot` helper so 
 
 ## Why
 
-Hyprland renders HDR outputs in a linear scRGB framebuffer. The original script used `wayfreeze` to paint that framebuffer back to the screen, which made the entire display grey and the selection rectangle black. We now:
-
-1. Temporarily force all monitors to 8-bit mode before freezing.
-2. Use `wayfreeze --hide-cursor` so the screen locks immediately when the shortcut is pressed.
-3. Restore each monitor's original bit-depth after the selection ends.
-4. Capture the actual region with `gpu-screen-recorder` (still tonemapped for the saved image) and pass it to Satty or the clipboard.
+Hyprland renders HDR outputs in a linear scRGB framebuffer. The original script used `wayfreeze` to paint that framebuffer back to the screen, which made the entire display grey and the selection rectangle black. This helper freezes the scene with `hyprpicker`, lets you choose a window or region via `slurp`, and then saves exactly that area with `grim`. The resulting PNG can be edited in Satty or copied directly to the clipboard while preserving the compositor’s tonemapping.
 
 ## Files
 
-- `omarchy-cmd-screenshot.sh` – the updated screenshot script.
+- `omarchy-cmd-screenshot.sh` – the screenshot helper.
 - `install.sh` – convenience script to back up your current binary and install this version.
 
 ## Dependencies
 
 Make sure these tools are available (Arch package names shown):
 
-- `gpu-screen-recorder`
-- `wayfreeze`
-- `imv`
+- `hyprpicker`
+- `grim`
+- `slurp`
 - `hyprctl` (from Hyprland)
 - `jq`
 - `satty`
+- `wl-clipboard`
 
 The install script preserves the previous copy at `omarchy-cmd-screenshot.backup-$(date …)` so you can roll back easily.
 
@@ -40,4 +36,9 @@ This script copies the updated helper to `~/.local/share/omarchy/bin/omarchy-cmd
 
 ## Usage
 
-Use your existing Hyprland bindings (PrintScreen, Shift+PrintScreen, etc.). When you press the hotkey the screen freezes instantly, the selection box is visible, and the resulting capture is tonemapped via `gpu-screen-recorder`.
+Reuse your existing Hyprland bindings (PrintScreen, Shift+PrintScreen, etc.). When invoked, the helper:
+
+1. Freezes the display so the visible frame stays put.
+2. Lets you draw a region or click a window (`smart` mode snaps tiny selections to their containing window).
+3. Captures the selection with `grim`.
+4. Either opens Satty for editing/saving or pipes the PNG straight to the clipboard, depending on the binding (`... clipboard` skips Satty).
