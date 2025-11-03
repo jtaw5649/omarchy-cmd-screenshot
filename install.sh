@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_SCRIPT="$SRC_DIR/omarchy-cmd-screenshot.sh"
+SRC_SCRIPT="$SRC_DIR/omarchy-cmd-screenshot"
 TARGET_SCRIPT="$HOME/.local/share/omarchy/bin/omarchy-cmd-screenshot"
 
 if [[ ! -f "$SRC_SCRIPT" ]]; then

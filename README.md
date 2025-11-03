@@ -8,7 +8,7 @@ Hyprland renders HDR outputs in a linear scRGB framebuffer. The original script 
 
 ## Files
 
-- `omarchy-cmd-screenshot.sh` – the screenshot helper.
+- `omarchy-cmd-screenshot` – the screenshot helper.
 - `install.sh` – convenience script to back up your current binary and install this version.
 
 ## Dependencies

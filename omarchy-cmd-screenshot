@@ -140,7 +140,7 @@ fi
 
 OUTPUT_PATH="$OUTPUT_DIR/$filename"
 mv "$TMPFILE" "$OUTPUT_PATH"
-TMPFILE="$OUTPUT_PATH"
+TMPFILE=""
 
 satty --filename "$OUTPUT_PATH" \
   --output-filename "$OUTPUT_PATH" \
